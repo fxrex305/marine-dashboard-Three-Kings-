@@ -182,6 +182,7 @@
         };
 
         function showMessage(message, type = 'info') {
+            console.log(`STATUS: ${message}`);
             const el = elements.statusMessage;
             el.textContent = message;
             el.className = `p-4 text-center font-medium rounded-lg mb-4`;
@@ -330,6 +331,7 @@
         }
 
         async function fetchWaypointData(waypoint) {
+            console.log(`Fetching data for waypoint: ${waypoint.name}`);
             const marineUrl = `${CONFIG.API_URLS.marine}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wave_height&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}`;
             const weatherUrl = `${CONFIG.API_URLS.weather}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
             
@@ -339,6 +341,7 @@
             ]);
             
             if (!marineData?.hourly?.wave_height || !weatherData?.hourly?.wind_speed_10m) {
+                console.error(`Incomplete API response for ${waypoint.name}`, { marineData, weatherData });
                 throw new Error("Invalid API response structure");
             }
             
@@ -354,18 +357,23 @@
             );
 
             for (let i = 0; i < maxPoints; i += CONFIG.INTERVAL_HOURS) {
-                combined.push({
-                    time: new Date(weatherData.hourly.time[i]).getTime(),
-                    wind: weatherData.hourly.wind_speed_10m[i] || 0,
-                    wave: marineData.hourly.wave_height[i] || 0,
-                    currents: currents
-                });
+                // Ensure data points exist before pushing
+                if (weatherData.hourly.time[i] && weatherData.hourly.wind_speed_10m[i] !== undefined && marineData.hourly.wave_height[i] !== undefined) {
+                     combined.push({
+                        time: new Date(weatherData.hourly.time[i]).getTime(),
+                        wind: weatherData.hourly.wind_speed_10m[i] || 0,
+                        wave: marineData.hourly.wave_height[i] || 0,
+                        currents: currents
+                    });
+                }
             }
 
             if (combined.length === 0) {
+                console.error(`No valid data points generated for ${waypoint.name}`);
                 throw new Error("No valid data points generated");
             }
-
+            
+            console.log(`Successfully fetched ${combined.length} data points for ${waypoint.name}`);
             return combined;
         }
 
@@ -408,12 +416,12 @@
             };
 
             if (!wpData || wpData.length === 0) {
+                console.warn(`No weather data available for segment: ${segment.name}`);
                 return baseAnalysis;
             }
 
             let analysisHours = segment.distance_nm === 0 ? 24 : Math.ceil(segment.distance_nm / CONFIG.VESSEL.cruising_speed_kts);
             let dataPoints = Math.ceil(analysisHours / CONFIG.INTERVAL_HOURS);
-
             let maxWind = 0;
             let maxWave = 0;
 
@@ -421,9 +429,15 @@
                 baseAnalysis.startTime = formatTime(wpData[startIndex].time);
                 const endIndex = Math.min(startIndex + dataPoints, wpData.length);
                 for (let i = startIndex; i < endIndex; i++) {
-                    maxWind = Math.max(maxWind, wpData[i].wind);
-                    maxWave = Math.max(maxWave, wpData[i].wave);
+                    // Check if data is valid before accessing
+                    if(wpData[i]) {
+                        maxWind = Math.max(maxWind, wpData[i].wind);
+                        maxWave = Math.max(maxWave, wpData[i].wave);
+                    }
                 }
+            } else {
+                console.warn(`Start index ${startIndex} is out of bounds for waypoint data. Skipping analysis for segment: ${segment.name}`);
+                return baseAnalysis;
             }
 
             let safety = "SAFE";
@@ -452,6 +466,7 @@
         }
 
         function analyzeTrip(weatherData, startDayOffset = 0) {
+            console.log(`Starting trip analysis for day offset: ${startDayOffset}`);
             const analysis = {
                 segments: [],
                 totalHours: 0,
@@ -461,7 +476,6 @@
                 startDay: startDayOffset + 1
             };
 
-            // Calculate start index based on days and interval hours
             const startHourIndex = startDayOffset * (24 / CONFIG.INTERVAL_HOURS);
             let currentHourIndex = startHourIndex;
             let dangerousCount = 0;
@@ -496,6 +510,7 @@
                 analysis.recommendation = "🟢 GOOD TO GO - Favorable conditions";
             }
 
+            console.log("Trip analysis complete.");
             return analysis;
         }
 
@@ -774,6 +789,7 @@
                 showMessage('Fetching live weather data and running analysis...', 'info');
                 await saveSettings();
                 state.allWeatherData = await fetchAllWaypointWeather();
+                showMessage('Data fetch complete. Running trip analysis...', 'info');
                 state.tripAnalysis = analyzeTrip(state.allWeatherData, state.startDateOffset);
                 showMessage('Analysis complete!', 'success');
                 renderUI();
