@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marine Weather (Three Kings)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .tab-content {
+            display: none;
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+        .tab-button {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            border-bottom: 3px solid #10b981;
+            color: #10b981;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-2 sm:p-4">
+
+    <div class="container">
+        <!-- Header -->
+        <header class="p-6 bg-white border-b border-gray-200">
+            <h1 class="text-2xl font-bold text-center text-gray-800">⚓ Marine Weather (Three Kings)</h1>
+            <p id="user-id-display" class="mt-2 text-xs text-center text-gray-400"></p>
+        </header>
+
+        <!-- Loading and Message Area -->
+        <div id="status-message" class="p-4 text-center bg-blue-100 text-blue-700 font-medium hidden"></div>
+
+        <!-- Start Date and Action Controls -->
+        <div class="p-6 bg-white border-b border-gray-200">
+            <div class="flex flex-col space-y-4">
+                <div class="flex-1 w-full sm:w-auto">
+                    <label for="start-date" class="block text-sm font-medium text-gray-700">Trip Start Date:</label>
+                    <select id="start-date" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm"></select>
+                </div>
+                <div class="flex-1 w-full">
+                    <label for="marine-api-url" class="block text-sm font-medium text-gray-700">Marine API URL:</label>
+                    <input type="text" id="marine-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://marine-api.open-meteo.com/v1/marine">
+                </div>
+                <div class="flex-1 w-full">
+                    <label for="weather-api-url" class="block text-sm font-medium text-gray-700">Weather API URL:</label>
+                    <input type="text" id="weather-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://api.open-meteo.com/v1/forecast">
+                </div>
+                <div class="flex-1 w-full">
+                    <label for="currents-api-url" class="block text-sm font-medium text-gray-700">Currents API URL (Placeholder):</label>
+                    <input type="text" id="currents-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://example.com/api/currents">
+                </div>
+                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                    <button id="run-analysis" class="w-full sm:w-auto px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-md hover:bg-emerald-700 transition-colors duration-200">Run Analysis</button>
+                    <button id="clear-cache" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md hover:bg-gray-300 transition-colors duration-200">Clear Data</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <nav class="flex justify-around bg-gray-50 border-b border-gray-200 text-gray-500 font-medium">
+            <button class="tab-button active flex-1 py-4 text-center" data-tab="dashboard">Dashboard</button>
+            <button class="tab-button flex-1 py-4 text-center" data-tab="trip-analysis">Trip Analysis</button>
+            <button class="tab-button flex-1 py-4 text-center" data-tab="fishing-forecast">Fishing Forecast</button>
+        </nav>
+
+        <!-- Main Content Area (Tab Content) -->
+        <main class="flex-1 p-4 overflow-y-auto">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Current Waypoint Conditions</h2>
+                <div id="dashboard-content" class="space-y-4">
+                    <div class="bg-blue-100 border border-blue-200 rounded-xl p-4 text-blue-700">Loading data...</div>
+                </div>
+            </div>
+
+            <!-- Trip Analysis Tab -->
+            <div id="trip-analysis" class="tab-content">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Fishing Trip Analysis</h2>
+                <div id="trip-analysis-content" class="space-y-4">
+                    <div class="bg-orange-100 border border-orange-200 rounded-xl p-4 text-orange-700">Please run an analysis to see the report.</div>
+                </div>
+            </div>
+
+            <!-- Fishing Forecast Tab -->
+            <div id="fishing-forecast" class="tab-content">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">King Bank & Middlesex Bank Forecast</h2>
+                <div id="fishing-forecast-content" class="space-y-4">
+                    <div class="bg-orange-100 border border-orange-200 rounded-xl p-4 text-orange-700">Please run an analysis to see the fishing forecast.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        setLogLevel('Debug');
+
+        // Global variables for Firebase config and App ID
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // ===== CONFIGURATION (from user's script) =====
+        const CONFIG = {
+          FORECAST_DAYS: 14,
+          INTERVAL_HOURS: 3,
+          VESSEL: {
+            name: "M/V Distinction",
+            cruising_speed_kts: 8
+          },
+          // UPDATED WAYPOINTS
+          WAYPOINTS: [
+            { name: "Opua", lat: -35.3085, lon: 174.1218 },
+            { name: "North_Cape", lat: -34.4167, lon: 173.0333 },
+            { name: "King_Bank", lat: -34.2667, lon: 172.1667 },
+            { name: "Middlesex_Bank", lat: -34.5833, lon: 172.2500 }
+          ],
+          // UPDATED ROUTE
+          ROUTE_SEGMENTS: [
+            { name: "Opua to North Cape", from: 0, to: 1, distance_nm: 76 },
+            { name: "North Cape to King Bank", from: 1, to: 2, distance_nm: 40 },
+            { name: "Fishing Day 1 (King Bank)", from: 2, to: 2, distance_nm: 0 },
+            { name: "King Bank to Middlesex Bank", from: 2, to: 3, distance_nm: 15 },
+            { name: "Fishing Day 2 (Middlesex Bank)", from: 3, to: 3, distance_nm: 0 },
+            { name: "Middlesex Bank to King Bank", from: 3, to: 2, distance_nm: 15 },
+            { name: "King Bank to North Cape", from: 2, to: 1, distance_nm: 40 },
+            { name: "North Cape to Opua", from: 1, to: 0, distance_nm: 76 }
+          ],
+          TZ: "Pacific/Auckland"
+        };
+        const SAFETY_THRESHOLDS = {
+          DANGEROUS: { wind: 30, wave: 3.5 },
+          MARGINAL: { wind: 20, wave: 2.5 },
+          ACCEPTABLE: { wind: 15, wave: 1.5 }
+        };
+
+        // ===== APP STATE AND CORE LOGIC =====
+        const state = {
+            db: null,
+            auth: null,
+            userId: null,
+            isAuthReady: false,
+            startDateOffset: 0,
+            marineApiUrl: 'https://marine-api.open-meteo.com/v1/marine',
+            weatherApiUrl: 'https://api.open-meteo.com/v1/forecast',
+            currentsApiUrl: '',
+            allWeatherData: {},
+            tripAnalysis: null,
+        };
+
+        const elements = {
+            statusMessage: document.getElementById('status-message'),
+            startDateSelect: document.getElementById('start-date'),
+            marineApiUrlInput: document.getElementById('marine-api-url'),
+            weatherApiUrlInput: document.getElementById('weather-api-url'),
+            currentsApiUrlInput: document.getElementById('currents-api-url'),
+            runAnalysisBtn: document.getElementById('run-analysis'),
+            clearCacheBtn: document.getElementById('clear-cache'),
+            userIdDisplay: document.getElementById('user-id-display'),
+            tabButtons: document.querySelectorAll('.tab-button'),
+            tabContents: document.querySelectorAll('.tab-content'),
+            dashboardContent: document.getElementById('dashboard-content'),
+            tripAnalysisContent: document.getElementById('trip-analysis-content'),
+            fishingForecastContent: document.getElementById('fishing-forecast-content'),
+        };
+
+        function showMessage(message, type = 'info') {
+            const el = elements.statusMessage;
+            el.textContent = message;
+            el.className = `p-4 text-center font-medium rounded-lg mb-4`;
+            switch(type) {
+                case 'success':
+                    el.classList.add('bg-green-100', 'text-green-700');
+                    break;
+                case 'error':
+                    el.classList.add('bg-red-100', 'text-red-700');
+                    break;
+                case 'warning':
+                    el.classList.add('bg-orange-100', 'text-orange-700');
+                    break;
+                default:
+                    el.classList.add('bg-blue-100', 'text-blue-700');
+            }
+            el.classList.remove('hidden');
+        }
+
+        function hideMessage() {
+            elements.statusMessage.classList.add('hidden');
+        }
+
+        // --- Firebase Functions ---
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                state.db = getFirestore(app);
+                state.auth = getAuth(app);
+
+                onAuthStateChanged(state.auth, async (user) => {
+                    console.log("Auth state changed. User:", user ? user.uid : "anonymous");
+                    state.isAuthReady = true;
+
+                    if (user) {
+                        state.userId = user.uid;
+                        elements.userIdDisplay.textContent = `User ID: ${state.userId}`;
+                        await loadSettings();
+                    } else {
+                        state.userId = crypto.randomUUID();
+                        elements.userIdDisplay.textContent = `Signed in anonymously.`;
+                    }
+
+                    renderUI();
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(state.auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(state.auth);
+                }
+
+                console.log("Firebase initialization initiated.");
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                showMessage("Failed to initialize Firebase. Please try again later.", 'error');
+            }
+        }
+
+        async function saveSettings() {
+            if (!state.isAuthReady || !state.userId || !state.auth.currentUser) {
+                console.error("Auth not ready or user not signed in. Cannot save settings.");
+                return;
+            }
+            try {
+                const settingsDocRef = doc(state.db, `artifacts/${appId}/users/${state.userId}/app_settings/main`);
+                await setDoc(settingsDocRef, {
+                    startDateOffset: state.startDateOffset,
+                    marineApiUrl: state.marineApiUrl,
+                    weatherApiUrl: state.weatherApiUrl,
+                    currentsApiUrl: state.currentsApiUrl
+                });
+                console.log("Settings saved to Firestore.");
+            } catch (error) {
+                console.error("Failed to save settings:", error);
+            }
+        }
+
+        async function loadSettings() {
+            if (!state.isAuthReady || !state.userId) {
+                console.error("Auth not ready. Cannot load settings.");
+                return;
+            }
+            try {
+                console.log("Attempting to load settings for userId:", state.userId);
+                const settingsDocRef = doc(state.db, `artifacts/${appId}/users/${state.userId}/app_settings/main`);
+                const docSnap = await getDoc(settingsDocRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    state.startDateOffset = data.startDateOffset || 0;
+                    state.marineApiUrl = data.marineApiUrl || state.marineApiUrl;
+                    state.weatherApiUrl = data.weatherApiUrl || state.weatherApiUrl;
+                    state.currentsApiUrl = data.currentsApiUrl || '';
+                    elements.startDateSelect.value = state.startDateOffset;
+                    elements.marineApiUrlInput.value = state.marineApiUrl;
+                    elements.weatherApiUrlInput.value = state.weatherApiUrl;
+                    elements.currentsApiUrlInput.value = state.currentsApiUrl;
+                    console.log("Settings loaded from Firestore:", data);
+                } else {
+                    console.log("No settings found in Firestore. Using default values.");
+                }
+            } catch (error) {
+                console.error("Failed to load settings:", error);
+            }
+        }
+
+        // --- API Data and Logic from Script ---
+        function getConditionsDescription(wind, wave) {
+            if (wind > 30 || wave > 3.5) return "Dangerous";
+            if (wind > 20 || wave > 2.5) return "Rough";
+            if (wind > 15 || wave > 1.5) return "Moderate";
+            if (wind > 10 || wave > 1.0) return "Slight";
+            return "Calm";
+        }
+
+        function formatDate(timestamp) {
+            return new Date(timestamp).toLocaleDateString("en-NZ", { timeZone: CONFIG.TZ });
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleString("en-NZ", {
+                timeStyle: "long",
+                timeZone: CONFIG.TZ,
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+        
+        async function fetchWithRetry(url) {
+            let attempts = 0;
+            const maxAttempts = 3;
+            const initialDelay = 1000;
+
+            while (attempts < maxAttempts) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`API returned status ${response.status}: ${response.statusText}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error(`Attempt ${attempts + 1} failed for ${url}:`, error);
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        const delay = initialDelay * Math.pow(2, attempts - 1);
+                        console.log(`Retrying in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        throw new Error(`Failed to fetch data after ${maxAttempts} attempts: ${error.message}`);
+                    }
+                }
+            }
+        }
+
+        async function fetchWaypointData(waypoint) {
+            const marineUrl = `${state.marineApiUrl}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wave_height&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}`;
+            const weatherUrl = `${state.weatherApiUrl}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
+            
+            const [marineData, weatherData] = await Promise.all([
+                fetchWithRetry(marineUrl),
+                fetchWithRetry(weatherUrl)
+            ]);
+            
+            if (!marineData?.hourly?.wave_height || !weatherData?.hourly?.wind_speed_10m) {
+                throw new Error("Invalid API response structure");
+            }
+            
+            let currents = 'N/A';
+            if (state.currentsApiUrl) {
+                console.warn("Currents API URL is provided but the fetching logic is not yet implemented.");
+            }
+
+            const combined = [];
+            const maxPoints = Math.min(
+                marineData.hourly.time.length,
+                weatherData.hourly.time.length
+            );
+
+            for (let i = 0; i < maxPoints; i += CONFIG.INTERVAL_HOURS) {
+                combined.push({
+                    time: new Date(weatherData.hourly.time[i]).getTime(),
+                    wind: weatherData.hourly.wind_speed_10m[i] || 0,
+                    wave: marineData.hourly.wave_height[i] || 0,
+                    currents: currents
+                });
+            }
+
+            if (combined.length === 0) {
+                throw new Error("No valid data points generated");
+            }
+
+            return combined;
+        }
+
+        async function fetchAllWaypointWeather() {
+            const results = {};
+            const waypointPromises = CONFIG.WAYPOINTS.map(waypoint => {
+                return fetchWaypointData(waypoint)
+                    .then(data => {
+                        results[waypoint.name] = data;
+                    })
+                    .catch(e => {
+                        console.error(`Failed to fetch ${waypoint.name}: ${e.message}`);
+                    });
+            });
+
+            await Promise.all(waypointPromises);
+            return results;
+        }
+
+
+        function analyzeSegment(segment, weatherData, startIndex) {
+            const fromWp = CONFIG.WAYPOINTS[segment.from];
+            const toWp = CONFIG.WAYPOINTS[segment.to];
+
+            let wpData = weatherData[fromWp.name];
+            if (segment.distance_nm === 0) {
+                wpData = weatherData[toWp.name];
+            }
+
+            const baseAnalysis = {
+                name: segment.name,
+                from: fromWp.name,
+                to: toWp.name,
+                duration: segment.distance_nm === 0 ? 24 : Math.round(segment.distance_nm / CONFIG.VESSEL.cruising_speed_kts),
+                startTime: "N/A",
+                maxWind: 0,
+                maxWave: 0,
+                safety: "UNKNOWN",
+                conditions: "No data"
+            };
+
+            if (!wpData || wpData.length === 0) {
+                return baseAnalysis;
+            }
+
+            let analysisHours = segment.distance_nm === 0 ? 24 : Math.ceil(segment.distance_nm / CONFIG.VESSEL.cruising_speed_kts);
+            let dataPoints = Math.ceil(analysisHours / CONFIG.INTERVAL_HOURS);
+
+            let maxWind = 0;
+            let maxWave = 0;
+
+            if (startIndex < wpData.length) {
+                baseAnalysis.startTime = formatTime(wpData[startIndex].time);
+                const endIndex = Math.min(startIndex + dataPoints, wpData.length);
+                for (let i = startIndex; i < endIndex; i++) {
+                    maxWind = Math.max(maxWind, wpData[i].wind);
+                    maxWave = Math.max(maxWave, wpData[i].wave);
+                }
+            }
+
+            let safety = "SAFE";
+            let conditions = "Good";
+
+            if (maxWind > SAFETY_THRESHOLDS.DANGEROUS.wind || maxWave > SAFETY_THRESHOLDS.DANGEROUS.wave) {
+                safety = "DANGEROUS";
+                conditions = `Dangerous: ${maxWind.toFixed(0)}kt, ${maxWave.toFixed(1)}m`;
+            } else if (maxWind > SAFETY_THRESHOLDS.MARGINAL.wind || maxWave > SAFETY_THRESHOLDS.MARGINAL.wave) {
+                safety = "MARGINAL";
+                conditions = `Rough: ${maxWind.toFixed(0)}kt, ${maxWave.toFixed(1)}m`;
+            } else if (maxWind > SAFETY_THRESHOLDS.ACCEPTABLE.wind || maxWave > SAFETY_THRESHOLDS.ACCEPTABLE.wave) {
+                safety = "ACCEPTABLE";
+                conditions = `Moderate: ${maxWind.toFixed(0)}kt, ${maxWave.toFixed(1)}m`;
+            } else {
+                conditions = `Good: ${maxWind.toFixed(0)}kt, ${maxWave.toFixed(1)}m`;
+            }
+
+            return {
+                ...baseAnalysis,
+                maxWind: maxWind.toFixed(1),
+                maxWave: maxWave.toFixed(1),
+                safety: safety,
+                conditions: conditions
+            };
+        }
+
+        function analyzeTrip(weatherData, startDayOffset = 0) {
+            const analysis = {
+                segments: [],
+                totalHours: 0,
+                status: "ANALYZING",
+                warnings: [],
+                recommendation: "Calculating...",
+                startDay: startDayOffset + 1
+            };
+
+            const startHourIndex = startDayOffset * 8;
+            let currentHourIndex = startHourIndex;
+            let dangerousCount = 0;
+            let marginalCount = 0;
+
+            CONFIG.ROUTE_SEGMENTS.forEach(segment => {
+                const segmentAnalysis = analyzeSegment(segment, weatherData, currentHourIndex);
+                analysis.segments.push(segmentAnalysis);
+                analysis.totalHours += segmentAnalysis.duration;
+
+                if (segmentAnalysis.safety === "DANGEROUS") {
+                    dangerousCount++;
+                    analysis.warnings.push(`DANGEROUS: ${segment.name}`);
+                } else if (segmentAnalysis.safety === "MARGINAL") {
+                    marginalCount++;
+                }
+
+                currentHourIndex += Math.ceil(segmentAnalysis.duration / CONFIG.INTERVAL_HOURS);
+            });
+
+            if (dangerousCount > 0) {
+                analysis.status = "DANGEROUS CONDITIONS";
+                analysis.recommendation = "🔴 DO NOT PROCEED - Dangerous conditions expected";
+            } else if (marginalCount > 2) {
+                analysis.status = "MULTIPLE MARGINAL CONDITIONS";
+                analysis.recommendation = "🟡 PROCEED WITH EXTREME CAUTION";
+            } else if (marginalCount > 0) {
+                analysis.status = "SOME MARGINAL CONDITIONS";
+                analysis.recommendation = "🟡 PROCEED WITH CAUTION";
+            } else {
+                analysis.status = "FAVORABLE CONDITIONS";
+                analysis.recommendation = "🟢 GOOD TO GO - Favorable conditions";
+            }
+
+            return analysis;
+        }
+
+        // --- UI Rendering Functions ---
+        function renderUI() {
+            elements.startDateSelect.innerHTML = '';
+            const today = new Date();
+            for (let i = 0; i < 9; i++) {
+                const date = new Date(today);
+                date.setDate(today.getDate() + i);
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Day ${i + 1} (${formatDate(date.getTime())})`;
+                elements.startDateSelect.appendChild(option);
+            }
+            elements.startDateSelect.value = state.startDateOffset;
+            elements.marineApiUrlInput.value = state.marineApiUrl;
+            elements.weatherApiUrlInput.value = state.weatherApiUrl;
+            elements.currentsApiUrlInput.value = state.currentsApiUrl;
+
+            renderDashboard();
+            renderTripAnalysis();
+            renderFishingForecast();
+        }
+
+        function getDailySummary(waypointData) {
+            const dailySummaries = {};
+            if (!waypointData || waypointData.length === 0) return dailySummaries;
+
+            waypointData.forEach(point => {
+                const date = formatDate(point.time);
+                if (!dailySummaries[date]) {
+                    dailySummaries[date] = {
+                        date: date,
+                        minWind: Infinity,
+                        maxWind: -Infinity,
+                        minWave: Infinity,
+                        maxWave: -Infinity
+                    };
+                }
+                dailySummaries[date].minWind = Math.min(dailySummaries[date].minWind, point.wind);
+                dailySummaries[date].maxWind = Math.max(dailySummaries[date].maxWind, point.wind);
+                dailySummaries[date].minWave = Math.min(dailySummaries[date].minWave, point.wave);
+                dailySummaries[date].maxWave = Math.max(dailySummaries[date].maxWave, point.wave);
+            });
+            return Object.values(dailySummaries);
+        }
+
+        function renderDashboard() {
+            const contentDiv = elements.dashboardContent;
+            contentDiv.innerHTML = '';
+            const data = state.allWeatherData;
+
+            if (Object.keys(data).length === 0) {
+                contentDiv.innerHTML = '<div class="bg-blue-100 border border-blue-200 rounded-xl p-4 text-blue-700">Please click "Run Analysis" to get the latest weather data.</div>';
+                return;
+            }
+
+            Object.keys(data).forEach(wpName => {
+                const wpData = data[wpName];
+                const dailySummary = getDailySummary(wpData);
+
+                let waypointHtml = `<h3 class="text-xl font-bold mb-2 mt-4">${wpName.replace(/_/g, ' ')}</h3>`;
+                waypointHtml += `<div class="space-y-2">`;
+                dailySummary.forEach(day => {
+                    const conditions = getConditionsDescription(day.maxWind, day.maxWave);
+                    let bgColor = '';
+                    switch(conditions) {
+                        case 'Calm':
+                        case 'Slight':
+                            bgColor = 'bg-emerald-100';
+                            break;
+                        case 'Moderate':
+                            bgColor = 'bg-yellow-100';
+                            break;
+                        case 'Rough':
+                            bgColor = 'bg-orange-100';
+                            break;
+                        case 'Dangerous':
+                            bgColor = 'bg-red-100';
+                            break;
+                        default:
+                            bgColor = 'bg-gray-100';
+                    }
+                    const cardHtml = `
+                        <div class="${bgColor} border border-gray-200 rounded-xl p-4">
+                            <p class="font-semibold">${day.date}</p>
+                            <p><strong>Wind:</strong> ${day.minWind.toFixed(1)} - ${day.maxWind.toFixed(1)} kts</p>
+                            <p><strong>Wave:</strong> ${day.minWave.toFixed(1)} - ${day.maxWave.toFixed(1)} m</p>
+                            <p><strong>Conditions:</strong> ${conditions}</p>
+                        </div>
+                    `;
+                    waypointHtml += cardHtml;
+                });
+                waypointHtml += `</div>`;
+                contentDiv.innerHTML += waypointHtml;
+            });
+        }
+
+        function renderTripAnalysis() {
+            const contentDiv = elements.tripAnalysisContent;
+            contentDiv.innerHTML = '';
+
+            if (!state.tripAnalysis) {
+                contentDiv.innerHTML = '<div class="bg-orange-100 border border-orange-200 rounded-xl p-4 text-orange-700">Please run an analysis to see the report.</div>';
+                return;
+            }
+
+            const analysis = state.tripAnalysis;
+            let recColor = '';
+            if (analysis.recommendation.includes("🟢")) recColor = 'bg-emerald-100 text-emerald-700';
+            else if (analysis.recommendation.includes("🟡")) recColor = 'bg-yellow-100 text-yellow-700';
+            else if (analysis.recommendation.includes("🔴")) recColor = 'bg-red-100 text-red-700';
+
+            const analysisHtml = `
+                <div class="space-y-4">
+                    <div class="p-4 rounded-xl font-bold text-center ${recColor}">
+                        ${analysis.recommendation}
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-1">
+                        <p><strong>Status:</strong> ${analysis.status}</p>
+                        <p><strong>Trip Duration:</strong> ${analysis.totalHours} hours</p>
+                        <p><strong>Start Date:</strong> Day ${analysis.startDay} (${formatDate(new Date().setDate(new Date().getDate() + analysis.startDay - 1))})</p>
+                    </div>
+                    ${analysis.warnings.length > 0 ? `
+                    <div class="p-4 bg-red-100 text-red-700 rounded-xl border border-red-200">
+                        <h3 class="font-bold">Warnings:</h3>
+                        <ul class="list-disc list-inside mt-2">
+                            ${analysis.warnings.map(w => `<li>${w}</li>`).join('')}
+                        </ul>
+                    </div>` : ''}
+                    <h3 class="text-lg font-bold mt-6 mb-2">Segment Breakdown</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white rounded-xl shadow overflow-hidden">
+                            <thead class="bg-gray-200 text-sm">
+                                <tr>
+                                    <th class="py-2 px-4 text-left">Leg</th>
+                                    <th class="py-2 px-4 text-left">From</th>
+                                    <th class="py-2 px-4 text-left">Duration</th>
+                                    <th class="py-2 px-4 text-left">Max Wind/Wave</th>
+                                    <th class="py-2 px-4 text-left">Safety</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${analysis.segments.map(s => {
+                                    let safetyColor = '';
+                                    switch(s.safety) {
+                                        case 'DANGEROUS': safetyColor = 'bg-red-200'; break;
+                                        case 'MARGINAL': safetyColor = 'bg-orange-200'; break;
+                                        case 'ACCEPTABLE': safetyColor = 'bg-yellow-200'; break;
+                                        default: safetyColor = 'bg-emerald-200';
+                                    }
+                                    return `
+                                    <tr class="border-t border-gray-100 text-sm">
+                                        <td class="py-2 px-4">${s.name}</td>
+                                        <td class="py-2 px-4">${s.from.replace(/_/g, ' ')}</td>
+                                        <td class="py-2 px-4">${s.duration}h</td>
+                                        <td class="py-2 px-4">${s.maxWind}kt / ${s.maxWave}m</td>
+                                        <td class="py-2 px-4"><span class="block text-center py-1 px-2 rounded-full text-xs font-semibold ${safetyColor}">${s.safety}</span></td>
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            contentDiv.innerHTML = analysisHtml;
+        }
+
+        function renderFishingForecast() {
+            const contentDiv = elements.fishingForecastContent;
+            contentDiv.innerHTML = '';
+            if (!state.tripAnalysis || (!state.allWeatherData.King_Bank && !state.allWeatherData.Middlesex_Bank)) {
+                contentDiv.innerHTML = '<div class="bg-orange-100 border border-orange-200 rounded-xl p-4 text-orange-700">Please run an analysis to see the fishing forecast.</div>';
+                return;
+            }
+
+            const banksData = {
+              'King_Bank': state.allWeatherData.King_Bank,
+              'Middlesex_Bank': state.allWeatherData.Middlesex_Bank
+            };
+
+            const fishingDays = [];
+            for (const [bankName, bankData] of Object.entries(banksData)) {
+              if (bankData) {
+                // Find fishing days for this specific bank from the route segments
+                const fishingSegments = CONFIG.ROUTE_SEGMENTS.filter(seg => seg.name.includes(bankName.replace('_', ' ')));
+                
+                fishingSegments.forEach((segment) => {
+                  const outboundHours = CONFIG.ROUTE_SEGMENTS.slice(0, CONFIG.ROUTE_SEGMENTS.indexOf(segment)).reduce((sum, seg) => sum + seg.distance_nm, 0) / CONFIG.VESSEL.cruising_speed_kts;
+                  const fishingStartIndex = (state.startDateOffset * 8) + Math.ceil(outboundHours / CONFIG.INTERVAL_HOURS);
+
+                  const fishingDayNumber = segment.name.split(' ')[2]; // Extract "Day 1", "Day 2"
+                  let maxWind = 0, maxWave = 0, goodHours = 0;
+                  let fishingDate = "N/A";
+
+                  if (fishingStartIndex >= 0 && fishingStartIndex < bankData.length) {
+                      fishingDate = formatDate(bankData[fishingStartIndex].time);
+                      for (let i = fishingStartIndex; i < Math.min(fishingStartIndex + 8, bankData.length); i++) {
+                          const data = bankData[i];
+                          if (data) {
+                              maxWind = Math.max(maxWind, data.wind);
+                              maxWave = Math.max(maxWave, data.wave);
+                              if (data.wind < 15 && data.wave < 1.5) {
+                                  goodHours += 3;
+                              }
+                          }
+                      }
+                  }
+
+                  const quality = goodHours >= 12 ? "Excellent" :
+                                 goodHours >= 8 ? "Good" :
+                                 goodHours >= 4 ? "Fair" : "Poor";
+
+                  fishingDays.push({
+                      day: fishingDayNumber,
+                      bank: bankName.replace('_', ' '),
+                      date: fishingDate,
+                      maxWind: maxWind.toFixed(1),
+                      maxWave: maxWave.toFixed(1),
+                      goodHours,
+                      quality
+                  });
+                });
+              }
+            }
+
+            const tableHtml = `
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white rounded-xl shadow overflow-hidden">
+                        <thead class="bg-gray-200 text-sm">
+                            <tr>
+                                <th class="py-2 px-4 text-left">Bank</th>
+                                <th class="py-2 px-4 text-left">Trip Day</th>
+                                <th class="py-2 px-4 text-left">Date</th>
+                                <th class="py-2 px-4 text-left">Max Wind (kts)</th>
+                                <th class="py-2 px-4 text-left">Max Wave (m)</th>
+                                <th class="py-2 px-4 text-left">Good Hours</th>
+                                <th class="py-2 px-4 text-left">Quality</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${fishingDays.map(day => {
+                                let qualityColor = '';
+                                switch(day.quality) {
+                                    case 'Excellent': qualityColor = 'bg-emerald-200'; break;
+                                    case 'Good': qualityColor = 'bg-yellow-200'; break;
+                                    case 'Fair': qualityColor = 'bg-orange-200'; break;
+                                    case 'Poor': qualityColor = 'bg-red-200'; break;
+                                }
+                                return `
+                                <tr class="border-t border-gray-100 text-sm">
+                                    <td class="py-2 px-4">${day.bank}</td>
+                                    <td class="py-2 px-4">${day.day}</td>
+                                    <td class="py-2 px-4">${day.date}</td>
+                                    <td class="py-2 px-4">${day.maxWind}</td>
+                                    <td class="py-2 px-4">${day.maxWave}</td>
+                                    <td class="py-2 px-4">${day.goodHours}</td>
+                                    <td class="py-2 px-4"><span class="block text-center py-1 px-2 rounded-full text-xs font-semibold ${qualityColor}">${day.quality}</span></td>
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            contentDiv.innerHTML = tableHtml;
+        }
+
+
+        // --- Event Listeners and Main App Flow ---
+        elements.runAnalysisBtn.addEventListener('click', async () => {
+            hideMessage();
+            elements.runAnalysisBtn.disabled = true;
+            elements.runAnalysisBtn.textContent = 'Fetching Data...';
+            try {
+                showMessage('Fetching live weather data and running analysis...', 'info');
+                state.marineApiUrl = elements.marineApiUrlInput.value;
+                state.weatherApiUrl = elements.weatherApiUrlInput.value;
+                state.currentsApiUrl = elements.currentsApiUrlInput.value;
+                await saveSettings();
+                state.allWeatherData = await fetchAllWaypointWeather();
+                state.tripAnalysis = analyzeTrip(state.allWeatherData, state.startDateOffset);
+                showMessage('Analysis complete!', 'success');
+                renderUI();
+            } catch (error) {
+                console.error("Analysis failed:", error);
+                showMessage('Analysis failed. Please check the console for details.', 'error');
+            } finally {
+                elements.runAnalysisBtn.disabled = false;
+                elements.runAnalysisBtn.textContent = 'Run Analysis';
+            }
+        });
+
+        elements.clearCacheBtn.addEventListener('click', () => {
+            hideMessage();
+            state.allWeatherData = {};
+            state.tripAnalysis = null;
+            showMessage('All local data cleared.', 'info');
+            renderUI();
+        });
+        
+        elements.startDateSelect.addEventListener('change', (e) => {
+            state.startDateOffset = parseInt(e.target.value);
+        });
+
+        elements.tabButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tab = e.target.dataset.tab;
+                elements.tabButtons.forEach(btn => btn.classList.remove('active'));
+                elements.tabContents.forEach(content => content.classList.remove('active'));
+
+                e.target.classList.add('active');
+                document.getElementById(tab).classList.add('active');
+            });
+        });
+
+        window.onload = initializeFirebase;
+    </script>
+
+</body>
+</html>
