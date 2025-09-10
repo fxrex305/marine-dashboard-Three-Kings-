@@ -63,18 +63,6 @@
                     <label for="start-date" class="block text-sm font-medium text-gray-700">Trip Start Date:</label>
                     <select id="start-date" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm"></select>
                 </div>
-                <div class="flex-1 w-full">
-                    <label for="marine-api-url" class="block text-sm font-medium text-gray-700">Marine API URL:</label>
-                    <input type="text" id="marine-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://marine-api.open-meteo.com/v1/marine">
-                </div>
-                <div class="flex-1 w-full">
-                    <label for="weather-api-url" class="block text-sm font-medium text-gray-700">Weather API URL:</label>
-                    <input type="text" id="weather-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://api.open-meteo.com/v1/forecast">
-                </div>
-                <div class="flex-1 w-full">
-                    <label for="currents-api-url" class="block text-sm font-medium text-gray-700">Currents API URL (Placeholder):</label>
-                    <input type="text" id="currents-api-url" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm" placeholder="e.g., https://example.com/api/currents">
-                </div>
                 <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                     <button id="run-analysis" class="w-full sm:w-auto px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-md hover:bg-emerald-700 transition-colors duration-200">Run Analysis</button>
                     <button id="clear-cache" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md hover:bg-gray-300 transition-colors duration-200">Clear Data</button>
@@ -156,7 +144,12 @@
             { name: "King Bank to North Cape", from: 2, to: 1, distance_nm: 40 },
             { name: "North Cape to Opua", from: 1, to: 0, distance_nm: 76 }
           ],
-          TZ: "Pacific/Auckland"
+          TZ: "Pacific/Auckland",
+          API_URLS: {
+            marine: 'https://marine-api.open-meteo.com/v1/marine',
+            weather: 'https://api.open-meteo.com/v1/forecast',
+            currents: ''
+          }
         };
         const SAFETY_THRESHOLDS = {
           DANGEROUS: { wind: 30, wave: 3.5 },
@@ -171,9 +164,6 @@
             userId: null,
             isAuthReady: false,
             startDateOffset: 0,
-            marineApiUrl: 'https://marine-api.open-meteo.com/v1/marine',
-            weatherApiUrl: 'https://api.open-meteo.com/v1/forecast',
-            currentsApiUrl: '',
             allWeatherData: {},
             tripAnalysis: null,
         };
@@ -181,9 +171,6 @@
         const elements = {
             statusMessage: document.getElementById('status-message'),
             startDateSelect: document.getElementById('start-date'),
-            marineApiUrlInput: document.getElementById('marine-api-url'),
-            weatherApiUrlInput: document.getElementById('weather-api-url'),
-            currentsApiUrlInput: document.getElementById('currents-api-url'),
             runAnalysisBtn: document.getElementById('run-analysis'),
             clearCacheBtn: document.getElementById('clear-cache'),
             userIdDisplay: document.getElementById('user-id-display'),
@@ -262,10 +249,7 @@
             try {
                 const settingsDocRef = doc(state.db, `artifacts/${appId}/users/${state.userId}/app_settings/main`);
                 await setDoc(settingsDocRef, {
-                    startDateOffset: state.startDateOffset,
-                    marineApiUrl: state.marineApiUrl,
-                    weatherApiUrl: state.weatherApiUrl,
-                    currentsApiUrl: state.currentsApiUrl
+                    startDateOffset: state.startDateOffset
                 });
                 console.log("Settings saved to Firestore.");
             } catch (error) {
@@ -285,13 +269,7 @@
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     state.startDateOffset = data.startDateOffset || 0;
-                    state.marineApiUrl = data.marineApiUrl || state.marineApiUrl;
-                    state.weatherApiUrl = data.weatherApiUrl || state.weatherApiUrl;
-                    state.currentsApiUrl = data.currentsApiUrl || '';
                     elements.startDateSelect.value = state.startDateOffset;
-                    elements.marineApiUrlInput.value = state.marineApiUrl;
-                    elements.weatherApiUrlInput.value = state.weatherApiUrl;
-                    elements.currentsApiUrlInput.value = state.currentsApiUrl;
                     console.log("Settings loaded from Firestore:", data);
                 } else {
                     console.log("No settings found in Firestore. Using default values.");
@@ -352,8 +330,8 @@
         }
 
         async function fetchWaypointData(waypoint) {
-            const marineUrl = `${state.marineApiUrl}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wave_height&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}`;
-            const weatherUrl = `${state.weatherApiUrl}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
+            const marineUrl = `${CONFIG.API_URLS.marine}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wave_height&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}`;
+            const weatherUrl = `${CONFIG.API_URLS.weather}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
             
             const [marineData, weatherData] = await Promise.all([
                 fetchWithRetry(marineUrl),
@@ -365,7 +343,7 @@
             }
             
             let currents = 'N/A';
-            if (state.currentsApiUrl) {
+            if (CONFIG.API_URLS.currents) {
                 console.warn("Currents API URL is provided but the fetching logic is not yet implemented.");
             }
 
@@ -533,10 +511,7 @@
                 elements.startDateSelect.appendChild(option);
             }
             elements.startDateSelect.value = state.startDateOffset;
-            elements.marineApiUrlInput.value = state.marineApiUrl;
-            elements.weatherApiUrlInput.value = state.weatherApiUrl;
-            elements.currentsApiUrlInput.value = state.currentsApiUrl;
-
+            
             renderDashboard();
             renderTripAnalysis();
             renderFishingForecast();
@@ -795,9 +770,6 @@
             elements.runAnalysisBtn.textContent = 'Fetching Data...';
             try {
                 showMessage('Fetching live weather data and running analysis...', 'info');
-                state.marineApiUrl = elements.marineApiUrlInput.value;
-                state.weatherApiUrl = elements.weatherApiUrlInput.value;
-                state.currentsApiUrl = elements.currentsApiUrlInput.value;
                 await saveSettings();
                 state.allWeatherData = await fetchAllWaypointWeather();
                 state.tripAnalysis = analyzeTrip(state.allWeatherData, state.startDateOffset);
@@ -840,3 +812,4 @@
 
 </body>
 </html>
+
