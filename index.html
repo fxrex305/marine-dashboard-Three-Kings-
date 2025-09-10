@@ -461,7 +461,8 @@
                 startDay: startDayOffset + 1
             };
 
-            const startHourIndex = startDayOffset * 8;
+            // Calculate start index based on days and interval hours
+            const startHourIndex = startDayOffset * (24 / CONFIG.INTERVAL_HOURS);
             let currentHourIndex = startHourIndex;
             let dangerousCount = 0;
             let marginalCount = 0;
@@ -683,21 +684,22 @@
                 
                 fishingSegments.forEach((segment) => {
                   const outboundHours = CONFIG.ROUTE_SEGMENTS.slice(0, CONFIG.ROUTE_SEGMENTS.indexOf(segment)).reduce((sum, seg) => sum + seg.distance_nm, 0) / CONFIG.VESSEL.cruising_speed_kts;
-                  const fishingStartIndex = (state.startDateOffset * 8) + Math.ceil(outboundHours / CONFIG.INTERVAL_HOURS);
+                  const fishingStartIndex = (state.startDateOffset * (24/CONFIG.INTERVAL_HOURS)) + Math.ceil(outboundHours / CONFIG.INTERVAL_HOURS);
 
-                  const fishingDayNumber = segment.name.split(' ')[2]; // Extract "Day 1", "Day 2"
+                  const fishingDayNumberMatch = segment.name.match(/Day (\d+)/);
+                  const fishingDayNumber = fishingDayNumberMatch ? fishingDayNumberMatch[1] : 'N/A';
                   let maxWind = 0, maxWave = 0, goodHours = 0;
                   let fishingDate = "N/A";
 
                   if (fishingStartIndex >= 0 && fishingStartIndex < bankData.length) {
                       fishingDate = formatDate(bankData[fishingStartIndex].time);
-                      for (let i = fishingStartIndex; i < Math.min(fishingStartIndex + 8, bankData.length); i++) {
+                      for (let i = fishingStartIndex; i < Math.min(fishingStartIndex + (24/CONFIG.INTERVAL_HOURS), bankData.length); i++) {
                           const data = bankData[i];
                           if (data) {
                               maxWind = Math.max(maxWind, data.wind);
                               maxWave = Math.max(maxWave, data.wave);
                               if (data.wind < 15 && data.wave < 1.5) {
-                                  goodHours += 3;
+                                  goodHours += CONFIG.INTERVAL_HOURS;
                               }
                           }
                       }
@@ -812,4 +814,3 @@
 
 </body>
 </html>
-
