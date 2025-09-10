@@ -329,45 +329,85 @@
                 }
             }
         }
+        
+        // New fallback function for when marine API fails
+        async function getFallbackData(waypoint) {
+            console.warn(`Falling back to weather API for wave data for ${waypoint.name}`);
+            const weatherUrl = `${CONFIG.API_URLS.weather}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
+            const weatherData = await fetchWithRetry(weatherUrl);
+            
+            if (!weatherData?.hourly?.wind_speed_10m) {
+                 throw new Error("Fallback API also failed or returned incomplete data.");
+            }
+
+            const combined = [];
+            for (let i = 0; i < weatherData.hourly.time.length; i += CONFIG.INTERVAL_HOURS) {
+                if (weatherData.hourly.time[i] && weatherData.hourly.wind_speed_10m[i] !== undefined) {
+                    // Use a simple wind-to-wave conversion as a proxy
+                    const wind = weatherData.hourly.wind_speed_10m[i] || 0;
+                    const wave = Math.max(0.1, wind * 0.05); // Simple proxy: 10kt = 0.5m, 20kt = 1.0m
+                     combined.push({
+                        time: new Date(weatherData.hourly.time[i]).getTime(),
+                        wind: wind,
+                        wave: wave,
+                        currents: 'N/A'
+                    });
+                }
+            }
+            if (combined.length === 0) {
+                 throw new Error("No valid fallback data points generated.");
+            }
+            return combined;
+        }
+
 
         async function fetchWaypointData(waypoint) {
             console.log(`Fetching data for waypoint: ${waypoint.name}`);
             const marineUrl = `${CONFIG.API_URLS.marine}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wave_height&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}`;
             const weatherUrl = `${CONFIG.API_URLS.weather}?latitude=${waypoint.lat}&longitude=${waypoint.lon}&hourly=wind_speed_10m&forecast_days=${CONFIG.FORECAST_DAYS}&timezone=${CONFIG.TZ}&wind_speed_unit=kn`;
             
-            const [marineData, weatherData] = await Promise.all([
-                fetchWithRetry(marineUrl),
-                fetchWithRetry(weatherUrl)
-            ]);
-            
-            if (!marineData?.hourly?.wave_height || !weatherData?.hourly?.wind_speed_10m) {
-                console.error(`Incomplete API response for ${waypoint.name}`, { marineData, weatherData });
-                throw new Error("Invalid API response structure");
+            let marineData, weatherData;
+
+            // Try to fetch marine data first
+            try {
+                marineData = await fetchWithRetry(marineUrl);
+            } catch(e) {
+                console.error(`Marine API failed for ${waypoint.name}: ${e.message}`);
             }
-            
-            let currents = 'N/A';
-            if (CONFIG.API_URLS.currents) {
-                console.warn("Currents API URL is provided but the fetching logic is not yet implemented.");
+
+            // Always fetch weather data for wind
+            try {
+                weatherData = await fetchWithRetry(weatherUrl);
+            } catch(e) {
+                console.error(`Weather API failed for ${waypoint.name}: ${e.message}`);
+                throw new Error("Both APIs failed to provide necessary data.");
             }
 
             const combined = [];
             const maxPoints = Math.min(
-                marineData.hourly.time.length,
+                (marineData?.hourly?.time?.length || weatherData.hourly.time.length),
                 weatherData.hourly.time.length
             );
 
+            let usingFallback = false;
+            if (!marineData?.hourly?.wave_height || marineData.hourly.wave_height.length === 0) {
+                console.warn(`Wave height data is empty or missing for ${waypoint.name}. Using wind-based fallback.`);
+                usingFallback = true;
+                const fallbackData = await getFallbackData(waypoint);
+                return fallbackData;
+            }
+
             for (let i = 0; i < maxPoints; i += CONFIG.INTERVAL_HOURS) {
-                // Ensure data points exist before pushing
                 if (weatherData.hourly.time[i] && weatherData.hourly.wind_speed_10m[i] !== undefined && marineData.hourly.wave_height[i] !== undefined) {
                      combined.push({
                         time: new Date(weatherData.hourly.time[i]).getTime(),
                         wind: weatherData.hourly.wind_speed_10m[i] || 0,
                         wave: marineData.hourly.wave_height[i] || 0,
-                        currents: currents
+                        currents: 'N/A'
                     });
                 }
             }
-
+            
             if (combined.length === 0) {
                 console.error(`No valid data points generated for ${waypoint.name}`);
                 throw new Error("No valid data points generated");
